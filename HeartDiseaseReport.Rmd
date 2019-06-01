@@ -1,0 +1,550 @@
+---
+title: "Heart Disease Prediction"
+author: "Lam Vu"
+date: "5/28/2019"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+####INTRODUCTION
+This dataset contains 76 attributes, but all published experiments refer to using a subset of 14 of them. In particular, the Cleveland database is the only one that has been used by ML researchers to this date. The "goal" field refers to the presence of heart disease in the patient. It is integer valued from 0 (no presence) to 4.
+
+**Attribute Information:**  
+ 1. **age** in year  
+ 2. **sex** (F=0, M=1)  
+ 3. **cp** - chest pain type (4 values)  
+ 4. **trestbps**  - resting blood pressure  
+ 5. **chol** - serum cholestoral in mg/dl   
+ 6. **fbs** - fasting blood sugar (value 0: <= 120 mg/dl, value 1: > 120 mg/dl)  
+ 7. **restecg** - resting electrocardiographic results (values 0,1,2)  
+ 8. **thalach** - maximum heart rate achieved   
+ 9. **exang** - exercise induced angina (value 1: yes; value 0: no)  
+ 10. **oldpeak** - ST depression induced by exercise relative to rest   
+ 11. **slope** of the peak exercise ST segment   
+ 12. **ca** - number of major vessels (0-3) colored by flourosopy   
+ 13. **thal** Thalassemia (3 = normal; 6 = fixed defect; 7 = reversable defect)  
+ 14. **target** heart disease present = 1, healthy = 0  
+ 
+The **objectives** of this project are to gain insights with the **heart** dataset through exploration, and visualization, and using different modeling approach to predict present of heart disease.
+
+####Dataset 
+The **heart** dataset can be view or download at https://www.kaggle.com/ronitf/heart-disease-uci. After downloaded the dataset, it can be examine in the following codes. File's name call is depending on its local location. 
+
+```{r echo=T, results='hide', message=F, warning=F}
+library(lattice)
+library(ggplot2)
+library(readr)
+library(caret)
+library(tidyr)
+library(dplyr)
+library(corrplot)
+
+###file's name call is depending on its downloaded location
+heart <- read_csv("/Users/lamvu/R_Projects/HeartDiseaseReport/heart.csv")
+
+```
+
+```{r fig.align='center', fig.width=10}
+str(heart)
+```
+
+Data contains *no* missing values
+```{r, echo=TRUE}
+#does data contain any missing values
+sum(is.na(heart))
+```
+
+####DATA ANALYSIS
+####Correlation matrix
+This is a graphical display of a correlation matrix and confidence interval of 13 predictors to target (aka heart condition). Positive correlations are displayed in red and negative correlations in green color. Color intensity and the size of the ellipse are proportional to the correlation coefficients and confidence interval. It is reordered by the first principal component "FPC".  
+Also, level of significance is denoted as stars: *** 0.001, ** 0.01, * 0.05. 
+
+```{r, echo=FALSE}
+#Plotting Heat Map for correlation matrix with customized color
+correlation <- cor(heart)
+col1 <- colorRampPalette(c("#5C9147","#FFFFFF","#c00000")) #custom heart color
+res1 <- cor.mtest(heart, conf.level = .95) #confidence interval
+
+corrplot(correlation, "ellipse", 
+         type = "lower", order = "FPC",
+         tl.col = "black", tl.srt = 45, #text color and style
+         p.mat = res1$p, insig = "label_sig", 
+         sig.level = c(.001, .01, .05), pch.cex = .8, pch.col = "white",
+         addrect = 2, col = col1(200))
+```
+
+####Preprocessing
+Converting type to factor and columns from numeric to categorical is necessary to illustrate relationship between different predictors to heart condition well.  Preprocessed data as followed:
+```{r, results='hide', message=F, warning=F}
+###converting type to factor
+heart$target<-as.factor(heart$target)
+heart$sex<-as.factor(heart$sex)
+heart$cp<-as.factor(heart$cp)
+heart$fbs<-as.factor(heart$fbs)
+heart$exang<-as.factor(heart$exang)
+heart$restecg<-as.factor(heart$restecg)
+heart$slope<-as.factor(heart$slope)
+heart$thal<-as.factor(heart$thal)
+
+##converting columns from numeric to categorical
+levels(heart$sex)[levels(heart$sex)==0] <- "Female"
+levels(heart$sex)[levels(heart$sex)==1] <- "Male"
+levels(heart$fbs)[levels(heart$fbs)==0] <- "Fasting Blood Sugar <= 120"
+levels(heart$fbs)[levels(heart$fbs)==1] <- "Fasting Blood Sugar > 120"
+levels(heart$thal)[levels(heart$thal)==0] <- "No Thalassemia"
+levels(heart$thal)[levels(heart$thal)==1] <- "Normal Thalassemia"
+levels(heart$thal)[levels(heart$thal)==2] <- "Fixed Defect Thalassemia"
+levels(heart$thal)[levels(heart$thal)==3] <- "Reversible Defect Thalassemia"
+levels(heart$target)[levels(heart$target)==0] <- "Healthy"
+levels(heart$target)[levels(heart$target)==1] <- "Heart Disease"
+levels(heart$exang)[levels(heart$exang)==1] <- "Exercise Induced Angina"
+levels(heart$exang)[levels(heart$exang)==0] <- "No Exercise Induced Angina"
+levels(heart$restecg)[levels(heart$restecg)==0] <- "Rest ECG 0"
+levels(heart$restecg)[levels(heart$restecg)==1] <- "Rest ECG 1"
+levels(heart$restecg)[levels(heart$restecg)==2] <- "Rest ECG 2"
+levels(heart$slope)[levels(heart$slope)==0] <- "Peak Excercise ST Slope 0"
+levels(heart$slope)[levels(heart$slope)==1] <- "Peak Excercise ST Slope 1"
+levels(heart$slope)[levels(heart$slope)==2] <- "Peak Excercise ST Slope 2"
+
+```
+
+
+```{r, results='hide', message=F, warning=F}
+summary(heart)
+```
+
+####Visualization
+**Table of number of male and female**
+```{r, fig.align='center', fig.width=10, echo=FALSE}
+###Table of number of male and female
+heart %>% group_by(sex) %>% 
+  summarize(n = n()) %>% knitr::kable()
+```
+
+```{r, echo=FALSE}
+library(ggplot2)
+ggplot(heart, aes(x= target, fill=target)) +
+  geom_bar(stat="count", position = 'dodge', alpha=0.7) +
+  geom_text(stat = "count", aes(label = ..count.. ), size = 3, 
+            position = position_dodge(width = 1),
+            vjust = -0.5) +
+  facet_wrap(~sex, ncol=2,scale="fixed") +
+  guides(fill=F)+
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  labs(x="heart condition") +
+  labs(y="number of people") +
+  ggtitle("Heart condition by sex") 
+
+```
+
+**Heart condition by age**
+```{r,echo=FALSE}
+###By age###
+heart %>% group_by(target) %>% 
+  summarize(n = n(), min = min(age), max = max(age), median = median(age), avg = mean(age)) %>% 
+  knitr::kable()
+
+ggplot(heart, aes(age, fill=target))+
+  geom_density(alpha=0.6)+
+  guides(col=F)+
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  labs(x="Age", fill="Target")+
+   ggtitle("Heart condition by age") 
+
+```
+
+**Table of heart condition associated with different type chest pain**
+```{r, echo=FALSE}
+##chest pain
+heart %>% group_by(cp, target) %>% 
+  summarize(n = n() ) %>% 
+  knitr::kable()
+```
+
+**Chest pain** of any type is *associated* with heart disease can be observed by the table above or graph below.
+```{r, echo=FALSE}
+ggplot(heart, aes(cp, fill=target))+
+  geom_bar(stat="count", alpha=0.7)+
+  scale_fill_manual(values=c("#5C9147","#c00000"))+
+  labs(x= "Chest Pain Type", fill="Target")
+```
+
+**Distribution between resting blood pressure and heart condition**  
+There's *no* noticable differences in blood pressure between healthy and heart disease subjects.   
+
+```{r, echo=FALSE}
+###Blood pressure
+ggplot(heart, aes(trestbps, fill=target))+
+  geom_density(alpha=0.6)+
+  guides(col=F)+
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  labs(x="Resting Blood Pressure", fill="Target")
+```
+
+    
+**Distribution between fasting blood sugar and heart condition**     
+The relationship is not significant.   
+
+```{r, echo=FALSE}
+##Distribution between fasting blood sugar and heart condition 
+ggplot(heart, aes(x= target, fill=target)) +
+  geom_bar(stat="count", position = 'dodge', alpha=0.7) +
+  geom_text(stat = "count", aes(label = ..count.. ), size = 3, 
+            position = position_dodge(width = 1),
+            vjust = -0.5) +
+  facet_wrap(~fbs, ncol=2, scale="fixed") +
+  guides(fill=F)+
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  labs(x="heart condition") +
+  labs(y="number of people") +
+  ggtitle("Heart condition by fasting blood sugar") 
+```
+
+**Distribution between rest ECG and heart condition**  
+More subjects with rest ECG result 1 has heart disease.
+```{r, echo=FALSE}
+####Distribution between restecg and heart condition 
+ggplot(heart, aes(x= target, fill=target)) +
+  geom_bar(stat="count", position = 'dodge', alpha=0.7) +
+  geom_text(stat = "count", aes(label = ..count.. ), size = 3, 
+            position = position_dodge(width = 1),
+            vjust = -0.5) +
+  facet_wrap(~restecg, ncol=3, scale="fixed") +
+  guides(fill=F)+
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  labs(x="heart condition") +
+  labs(y="number of people") +
+  ggtitle("Heart condition by rest ECG") 
+```
+
+**Distribution between maximum heart rate achieved and heart condition**    
+Maximum heart rate (**thalac**) is on average higher in subjects with heart disease.
+```{r, echo=FALSE}
+##Distribution between thalac and heart condition 
+ggplot(heart, aes(thalach, fill=target))+
+  geom_density(alpha=0.6)+
+  guides(col=F)+
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  labs(x="thalach", fill="Target")
+
+```
+
+**Distribution between exercise induced angina and heart condition**      
+More subjects with no exercise induced angina (**exang**) have heart disease.
+```{r, echo=FALSE}
+ggplot(heart, aes(x= target, fill=target)) +
+  geom_bar(stat="count", position = 'dodge', alpha=0.7) +
+  geom_text(stat = "count", aes(label = ..count.. ), size = 3, 
+            position = position_dodge(width = 1),
+            vjust = -0.5) +
+  facet_wrap(~exang, ncol=2, scale="fixed") +
+  guides(fill=F)+
+  guides(fill=F)+
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  labs(x="heart condition") +
+  labs(y="number of people") +
+  ggtitle("Exercise Induced Angina")
+```
+
+**Distribution between oldpeak excercise and heart condition**      
+Subject with heart disease has *significant* lower number of peak of ST depression induced by exercise relative to rest.
+```{r, echo = FALSE}
+##Distribution between oldpeak and heart condition 
+ggplot(heart, aes(oldpeak, fill=target))+
+  geom_density(alpha=0.6)+
+  guides(col=F)+
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  ggtitle("Distribution of oldpeak ") +
+  labs(x="Number of old peak", fill="Target")
+
+```
+
+**Distribution between slope and heart condition** 
+```{r, echo = FALSE}
+####Distribution between slope and heart condition 
+ggplot(heart, aes(x= target, fill=target)) +
+  geom_bar(stat="count", position = 'dodge', alpha=0.7) +
+  geom_text(stat = "count", aes(label = ..count.. ), size = 3, 
+            position = position_dodge(width = 1),
+            vjust = -0.5) +
+  facet_wrap(~slope, ncol=3, scale="fixed") +
+  guides(fill=F)+
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  labs(x="heart condition") +
+  labs(y="number of people") +
+  ggtitle("Heart condition by slope") 
+
+
+```
+
+**Distribution between number of major vessels colored by flourosopy and heart condition (ca)**     
+*Majority* of  subjects who have heart disease have *zero* (0) major vessels as observed by fluroscopy.
+```{r, echo=FALSE}
+##Distribution between number of major vessels colored by flourosopy and heart condition  
+ggplot(heart,aes(ca, fill=target)) +
+  geom_histogram(aes(y=..density..),breaks=seq(0, 5, by=1), alpha=0.7) +
+  geom_density(alpha=.1, fill="black")+
+  facet_wrap(~target, ncol=1,scale="fixed") +
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  ggtitle("No. Major Vessels Histogram") +
+  labs(x="Number of major vessels colored by flourosopy")
+```
+
+**Distribution between different type of Thalassemia and heart condition**  
+Fixed defect thalasemia (thal) has more subjects with heart disease.
+```{r, echo = FALSE}
+####Distribution between thal and heart condition 
+ggplot(heart, aes(target, fill=target)) +
+  geom_bar(stat="count", position = 'dodge', alpha=0.7) +
+  geom_text(stat = "count", aes(label = ..count.. ), size = 3, 
+            position = position_dodge(width = 1),
+            vjust = -0.5) +
+  facet_wrap(~thal, ncol=2,scale="fixed") +
+  scale_fill_manual(values=c("#5C9147","#c00000")) +
+  ggtitle("Thalassemia Histogram") 
+
+```
+
+
+####MODELS
+####Ensemble of models using *all* variables
+The full dataset is splitted into a training set and a testing set. The training set consists of 75% of the total values in the dataset, and the testing set consists of the remaining 25%.
+```{r }
+#Spliting training set into two parts based on outcome: 75% and 25%
+y <- heart$target
+
+set.seed(1)
+test_index = createDataPartition(y, times = 1, p=0.75,list=FALSE)
+train_set <- heart[test_index,]
+valid_set <- heart[-test_index,]
+
+```
+
+Ensemble method is used to capture linear and simple as well non-linear complex relationships in this data. It is done by using seventeen (17) different models and forming an ensemble of seventeen.
+
+```{r, echo=T, results='hide', message=F, warning=F }
+#############Ensembling with ALL predictors############################
+models <- c("glm", "lda",  "naive_bayes",  "svmLinear", "qda",
+            "knn", "kknn", "rf", "ranger",  "wsrf", "Rborist", 
+            "avNNet", "monmlp", "adaboost", "gbm",
+            "svmRadial", "svmRadialCost")
+
+#set.seed(1)
+fits <- lapply(models, function(model){ 
+  print(model)
+  train(target ~ ., method = model, data = train_set)
+}) 
+#fits
+names(fits) <- models
+
+```
+
+All the trained models is in a list now. Next, creating a matrix of predictions for the test set.  
+```{r, echo=T, message=F, warning=F}
+pred <- sapply(fits, function(object) 
+  predict(object, newdata = valid_set))
+dim(pred)
+```
+
+**Average**   
+Accuracy for each model in the test set and the mean accuracy across all models can be computed using the following code:
+```{r, echo=T, message=F, warning=F}
+acc <- colMeans(pred == valid_set$target)
+
+acc_results <- data_frame(method = models, acc = acc)
+acc_results %>% knitr::kable()
+
+#Result of the mean accuracy across all models.
+avg <- mean(acc)
+avg
+```
+
+**Majority Voting**    
+In majority voting, we’ll assign the prediction for the observation as predicted by the majority of models. Since we have seventeen models for a binary classification task, a tie is not possible.  
+
+```{r }
+#building an ensemble prediction by majority vote and compute the accuracy of the ensemble.
+votes <- rowMeans(pred == "Heart Disease")
+y_hat <- ifelse(votes > 0.5, "Heart Disease", "Healthy")
+
+#What is the accuracy of the ensemble?
+votes_avg <- mean(y_hat == valid_set$target)
+votes_avg
+```
+
+
+```{r, echo=TRUE, results='hide'}
+ind <- acc > mean(y_hat == valid_set$target)
+sum(ind)
+models[ind]
+```
+Individual methods perform better than the ensemble are **`r models[ind]`**    
+
+Using the accuracy estimates obtained from cross validation with the training data then find the mean accuracy of the new estimates.
+```{r, echo=T, message=F, warning=F}
+
+acc_hat <- sapply(fits, function(fit) min(fit$results$Accuracy))
+new_mean <- mean(acc_hat)
+```
+
+
+Now, only considering the methods with an estimated accuracy of greater than or equal to the new_mean of `r new_mean` when constructing the ensemble.
+```{r, echo=T, message=F, warning=F}
+ind <- acc_hat >= new_mean
+sum(ind)
+models[ind]
+
+votes <- rowMeans(pred[,ind] == "Heart Disease")
+y_hat <- ifelse(votes >=0.5, "Heart Disease", "Healthy")
+new_votes_avg <- mean(y_hat == valid_set$target)
+new_votes_avg
+```
+
+####Ensemble of models using *selected* variables
+**Sex**, Chest Pain Type (**cp**), Excercise Induced Angina (**exang**), ST Depression (**oldpeak**) & number of vessels observed by fluroscopy (**ca**) are the 5 variables that have significant effect on heart disease. The rest of the variables are not included further the following ensembles.    
+Codes to construct an ensemble of models using **selected** 5 variables is shown for reference only.
+
+```{r, results='hide', message=F, warning=F}
+#############Ensembles with SELECTED predictors############################
+#Spliting training set into two parts based on outcome: 75% and 25%
+heart_selected <- heart[,c(2,3,9,10,12,14)]
+summary(heart_selected)
+y_selected <- heart_selected$target
+
+set.seed(1)
+test_index = createDataPartition(y_selected, times = 1, p=0.75,list=FALSE)
+train_selected <- heart_selected[test_index,]
+test_selected <- heart_selected[-test_index,]
+
+models_selected <-c("glm", "lda",  "naive_bayes",  "svmLinear", "qda",
+            "knn", "kknn", "rf", "ranger",  "wsrf", "Rborist", 
+            "avNNet", "monmlp", "adaboost", "gbm",
+            "svmRadial", "svmRadialCost")
+
+
+fits_selected <- lapply(models_selected, function(model){ 
+  print(model)
+  train(target ~ ., method = model, data = train_selected)
+}) 
+
+names(fits_selected) <- models_selected
+
+#all the trained models is in a list now. Next, creating a matrix of predictions for the test set
+pred_selected <- sapply(fits_selected, function(object) 
+  predict(object, newdata = test_selected))
+dim(pred_selected)
+
+head(pred_selected)
+
+#Accuracy for each model in the test set 
+#and the mean accuracy across all models can be computed using the following code:
+acc2 <- colMeans(pred_selected == test_selected$target)
+
+acc2_results <- data_frame(method = models_selected, acc_selected = acc2)
+acc2_results %>% knitr::kable()
+
+#Result of the mean accuracy across all models.
+avg2 <- mean(acc2)
+avg2
+
+#Next, build an ensemble prediction by majority vote and compute the accuracy of the ensemble.
+#What is the accuracy of the ensemble
+votes2 <- rowMeans(pred_selected == "Heart Disease")
+y_hat2 <- ifelse(votes2 > 0.5, "Heart Disease", "Healthy")
+votes_avg2 <- mean(y_hat2 == test_selected$target)
+votes_avg2
+
+#Which individual methods perform better than the ensemble
+ind2 <- acc2 > mean(y_hat2 == test_selected$target)
+sum(ind2)
+models_selected[ind2]
+
+
+#using the accuracy estimates obtained from cross validation with the training data
+#finding mean accuracy of the new estimates
+acc2_hat <- sapply(fits_selected, function(fit) min(fit$results$Accuracy))
+acc2_hat
+new_mean2 <- mean(acc2_hat)
+new_mean2
+
+
+#Now let's only consider the methods 
+#with an estimated accuracy of greater than or equal to the new_mean when constructing the ensemble
+ind2 <- acc2_hat >= new_mean2
+sum(ind2)
+models_selected[ind2]
+
+votes2 <- rowMeans(pred_selected[,ind2] == "Heart Disease")
+y_hat2 <- ifelse(votes2 >=0.5, "Heart Disease", "Healthy")
+new_votes_avg2 <- mean(y_hat2 == test_selected$target)
+new_votes_avg2
+```
+
+
+```{r, echo = FALSE, results='hide', message=F, warning=F}
+####adding new column of accuracies to result table 
+acc2_results <- bind_cols(acc2_results,
+                         data_frame(hat_selected = acc2_hat ))
+
+#adding new row of Ensemble Averages to result table 
+acc2_results <- bind_rows(acc2_results ,
+                         data_frame(method="Ensemble Average",  
+                                    acc_selected = avg2, hat_selected = new_mean2 ))
+##adding new row of Ensemble Majority Vote to result table 
+final_results2 <- bind_rows(acc2_results ,
+                           data_frame(method="Ensemble Majority Vote",  
+                                      acc_selected = votes_avg2, hat_selected = new_votes_avg2))
+final_results2 %>% knitr::kable()
+
+```
+
+
+####RESULTS
+Results table includes:  
+*Ensembling models using **all** variables*   
+1. **acc** - accuracy for *each* model in the test set  
+2. the *mean* accuracy across all models (acc)  
+3. the *majority vote* accuracy of all models (acc)   
+4. **acc_hat** - accuracy estimates obtained from cross validation with the *training* data   
+5. the *mean* accuracy of the new estimates (acc_hat)  
+6. the *majority vote* accuracy of the new estimates (acc_hat)   
+
+*Ensembling models using **selected** 5 variables*   
+7. **acc_selected** - accuracy for *each* model in the selected test set  
+8. the *mean* accuracy across all models (acc_selected)  
+9. the *majority vote* accuracy of all models (acc_selected)   
+10. **hat_selected** - accuracy estimates obtained from cross validation with the *selected training* data   
+11. the *mean* accuracy of the new estimates (hat_selected)  
+12. the *majority vote* accuracy of the new estimates (hat_selected) 
+
+
+```{r, echo= FALSE}
+##adding new column of accuracies to result table 
+acc_results <- bind_cols(acc_results,
+                          data_frame(acc_hat = acc_hat, acc_selected = acc2, hat_selected = acc2_hat  ))
+
+##adding new row of Ensemble Averages to result table 
+acc_results <- bind_rows(acc_results ,
+                         data_frame(method="Ensemble: Average",  
+                                    acc = avg, acc_hat = new_mean, 
+                                    acc_selected = avg2, hat_selected = new_mean2 ))
+##adding new row of Ensemble Majority Vote to result table 
+final_results <- bind_rows(acc_results ,
+                         data_frame(method="Ensemble: Majority Vote",  
+                                    acc = votes_avg, acc_hat = new_votes_avg,
+                                    acc_selected = votes_avg2, hat_selected = new_votes_avg2))
+final_results %>% knitr::kable()
+```
+
+
+####CONCLUSION
+In machine learning, the final result of the predictions can be improve by combining the results of different algorithms. Ensembling is used in this project to improve the final accuracy of the model for the **heart** dataset.   
+The best accuracy of `r final_results[19,3]` is achieved with **ensemble majority vote** approach of 17 models using all variables. However, the accuracy is only improved by 1.34%  to `r final_results[19,5]` with the same approach that uses **selected** 5 best predictors of heart disease *sex*, chest pain (*cp*),  excercise induced angina (*exang*), ST depression induced by exercise (*oldpeak*), number of major vessels observed by fluroscopy (*ca*). Perhaps, experimenting with different parameters can yield a higher accuracy. However, it is a continuous process. For now, the **ensemble majority vote** approach with **selected** predictors described above is a winner.
+
