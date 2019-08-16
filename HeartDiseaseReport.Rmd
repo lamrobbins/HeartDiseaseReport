@@ -81,7 +81,7 @@ corrplot(correlation, "ellipse",
 ```
 
 ####Preprocessing
-Converting type to factor and columns from numeric to categorical is necessary to illustrate relationship between different predictors to heart condition well.  Preprocessed data as followed:
+Converting type to factor and columns from numeric to categorical is necessary to illustrate relationship between different predictors to heart condition well.  Preprocessed data as follow:
 ```{r, results='hide', message=F, warning=F}
 ###converting type to factor
 heart$target<-as.factor(heart$target)
@@ -168,7 +168,7 @@ heart %>% group_by(cp, target) %>%
   knitr::kable()
 ```
 
-**Chest pain** of any type is *associated* with heart disease can be observed by the table above or graph below.
+**Chest pain** of any type is *associated* with heart disease can be observe by the table above or graph below.
 ```{r, echo=FALSE}
 ggplot(heart, aes(cp, fill=target))+
   geom_bar(stat="count", alpha=0.7)+
@@ -546,5 +546,5 @@ final_results %>% knitr::kable()
 
 ####CONCLUSION
 In machine learning, the final result of the predictions can be improve by combining the results of different algorithms. Ensembling is used in this project to improve the final accuracy of the model for the **heart** dataset.   
-The best accuracy of `r final_results[19,3]` is achieved with **ensemble majority vote** approach of 17 models using all variables. However, the accuracy is only improved by 1.34%  to `r final_results[19,5]` with the same approach that uses **selected** 5 best predictors of heart disease *sex*, chest pain (*cp*),  excercise induced angina (*exang*), ST depression induced by exercise (*oldpeak*), number of major vessels observed by fluroscopy (*ca*). Perhaps, experimenting with different parameters can yield a higher accuracy. However, it is a continuous process. For now, the **ensemble majority vote** approach with **selected** predictors described above is a winner.
+The best accuracy of `r final_results[19,3]` is achieved with **ensemble majority vote** approach of 17 models using all variables. However, the accuracy is only improved by 1.34%  to `r final_results[19,5]` with the same approach that uses **selected** 5 best predictors of heart disease: *sex*, chest pain (*cp*),  excercise induced angina (*exang*), ST depression induced by exercise (*oldpeak*), number of major vessels observed by fluroscopy (*ca*). Perhaps, experimenting with different parameters can yield a higher accuracy. However, it is a continuous process. For now, the **ensemble majority vote** approach with **selected** predictors described above is a winner.
 
